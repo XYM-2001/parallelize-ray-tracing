@@ -1,10 +1,11 @@
 #include <iostream>
 #include <fstream>
-#include <cmath>
 #include <vector>
+#include <cmath>
+#include <random>
 #include <chrono>
 
-// Vec3 and Sphere remain the same as in your CUDA code
+// Vec3 class for vector operations
 struct Vec3 {
     float x, y, z;
     Vec3() : x(0), y(0), z(0) {}
@@ -20,23 +21,23 @@ struct Vec3 {
     }
 };
 
+// Sphere structure
 struct Sphere {
     Vec3 center;
     float radius;
     Vec3 color;
     bool intersect(const Vec3& origin, const Vec3& dir, float& t) const {
         Vec3 oc = origin - center;
-        float a = dir.dot(dir);
-        float b = 2.0f * oc.dot(dir);
+        float b = oc.dot(dir);
         float c = oc.dot(oc) - radius * radius;
-        float discriminant = b * b - 4 * a * c;
+        float discriminant = b * b - c;
         if (discriminant < 0) return false;
-        t = (-b - sqrt(discriminant)) / (2.0f * a);
+        t = -b - sqrt(discriminant);
         return t > 0;
     }
 };
 
-// Save image function remains the same
+// Save the image to a PPM file
 void save_image(const Vec3* framebuffer, int width, int height, const char* filename) {
     std::ofstream file(filename, std::ios::out | std::ios::binary);
     file << "P6\n" << width << " " << height << "\n255\n";
@@ -49,13 +50,13 @@ void save_image(const Vec3* framebuffer, int width, int height, const char* file
 }
 
 int main() {
-    int width = 7680;
-    int height = 4320;
-    int num_pixels = width * height;\
+    int width = 3840;
+    int height = 2160;
+    int num_pixels = width * height;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<Vec3> framebuffer(num_pixels); // 使用 std::vector 存储像素
+    std::vector<Vec3> framebuffer(num_pixels);
 
     Sphere spheres[] = {
         { Vec3(0, 0, -3), 1, Vec3(1, 0, 0) },
@@ -64,28 +65,43 @@ int main() {
     };
     int sphere_count = 3;
 
+    // 初始化随机数生成器
+    std::mt19937 rng(12345); // 固定种子，保证可重复性
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
     // 遍历每个像素
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            int idx = y * width + x;
-            float u = (x + 0.5f) / width;
-            float v = (y + 0.5f) / height;
-            Vec3 ray_origin(0, 0, 0);
-            Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
-
             Vec3 pixel_color(0, 0, 0);
-            float t_min = 1e20f;
+            int samples = 4; // 每像素采样 4 次
 
-            // 遍历每个球体
-            for (int i = 0; i < sphere_count; ++i) {
-                float t;
-                if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
-                    t_min = t;
-                    pixel_color = spheres[i].color;
+            for (int s = 0; s < samples; ++s) {
+                // 随机采样 u 和 v
+                float u = (x + dist(rng)) / width;
+                float v = (y + dist(rng)) / height;
+
+                // 生成光线
+                Vec3 ray_origin(0, 0, 0);
+                Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
+
+                // 光线与球体相交检测
+                Vec3 sample_color(0, 0, 0);
+                float t_min = 1e20f;
+                for (int i = 0; i < sphere_count; ++i) {
+                    float t;
+                    if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
+                        t_min = t;
+                        sample_color = spheres[i].color;
+                    }
                 }
+
+                // 累加采样结果
+                pixel_color = pixel_color + sample_color;
             }
 
-            framebuffer[idx] = pixel_color;
+            // 取平均值
+            pixel_color = pixel_color / float(samples);
+            framebuffer[y * width + x] = pixel_color;
         }
     }
 

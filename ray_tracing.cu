@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cmath>
 #include <chrono>
+#include <curand_kernel.h>
 
 // Vec3 class for vector operations
 struct Vec3 {
@@ -38,6 +39,31 @@ struct Sphere {
 };
 
 // CUDA kernel for rendering
+// __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres, int sphere_count) {
+//     int x = blockIdx.x * blockDim.x + threadIdx.x;
+//     int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+//     if (x >= width || y >= height) return;
+
+//     int idx = y * width + x;
+//     float u = (x + 0.5f) / width;
+//     float v = (y + 0.5f) / height;
+//     Vec3 ray_origin(0, 0, 0);
+//     Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
+
+//     Vec3 pixel_color(0, 0, 0);
+//     float t_min = 1e20f;
+
+//     for (int i = 0; i < sphere_count; ++i) {
+//         float t;
+//         if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
+//             t_min = t;
+//             pixel_color = spheres[i].color;
+//         }
+//     }
+
+//     framebuffer[idx] = pixel_color;
+// }
 __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres, int sphere_count) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -45,22 +71,41 @@ __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres
     if (x >= width || y >= height) return;
 
     int idx = y * width + x;
-    float u = (x + 0.5f) / width;
-    float v = (y + 0.5f) / height;
-    Vec3 ray_origin(0, 0, 0);
-    Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
-
     Vec3 pixel_color(0, 0, 0);
-    float t_min = 1e20f;
+    int samples = 4; // 每像素采样 4 次
 
-    for (int i = 0; i < sphere_count; ++i) {
-        float t;
-        if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
-            t_min = t;
-            pixel_color = spheres[i].color;
+    // 初始化随机数种子（如果需要随机采样）
+    curandState rand_state;
+    curand_init((unsigned long long)idx, 0, 0, &rand_state);
+
+    for (int s = 0; s < samples; ++s) {
+        // 随机采样 u 和 v
+        float u = (x + curand_uniform(&rand_state)) / width;
+        float v = (y + curand_uniform(&rand_state)) / height;
+
+        // 生成光线
+        Vec3 ray_origin(0, 0, 0);
+        Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
+
+        // 跟踪光线
+        float t_min = 1e20f;
+        Vec3 sample_color(0, 0, 0);
+        for (int i = 0; i < sphere_count; ++i) {
+            float t;
+            if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
+                t_min = t;
+                sample_color = spheres[i].color;
+            }
         }
+
+        // 累加采样结果
+        pixel_color = pixel_color + sample_color;
     }
 
+    // 取平均值
+    pixel_color = pixel_color / float(samples);
+
+    // 写入帧缓冲区
     framebuffer[idx] = pixel_color;
 }
 
@@ -77,8 +122,8 @@ void save_image(const Vec3* framebuffer, int width, int height, const char* file
 }
 
 int main() {
-    int width = 7680;
-    int height = 4320;
+    int width = 3840;
+    int height = 2160;
     int num_pixels = width * height;
 
     auto start = std::chrono::high_resolution_clock::now();
