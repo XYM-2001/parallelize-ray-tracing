@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <chrono>
 
 // Vec3 class for vector operations
 struct Vec3 {
@@ -76,9 +77,11 @@ void save_image(const Vec3* framebuffer, int width, int height, const char* file
 }
 
 int main() {
-    int width = 800;
-    int height = 600;
+    int width = 7680;
+    int height = 4320;
     int num_pixels = width * height;
+
+    auto start = std::chrono::high_resolution_clock::now();
 
     Vec3* framebuffer;
     cudaMallocManaged(&framebuffer, num_pixels * sizeof(Vec3));
@@ -103,5 +106,13 @@ int main() {
     cudaFree(framebuffer);
     cudaFree(d_spheres);
 
+    // 停止计时
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // 输出时间
+    std::cout << "Total execution time: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+            << " ms\n";
+            
     return 0;
 }
