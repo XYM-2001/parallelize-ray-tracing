@@ -39,31 +39,6 @@ struct Sphere {
 };
 
 // CUDA kernel for rendering
-// __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres, int sphere_count) {
-//     int x = blockIdx.x * blockDim.x + threadIdx.x;
-//     int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-//     if (x >= width || y >= height) return;
-
-//     int idx = y * width + x;
-//     float u = (x + 0.5f) / width;
-//     float v = (y + 0.5f) / height;
-//     Vec3 ray_origin(0, 0, 0);
-//     Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
-
-//     Vec3 pixel_color(0, 0, 0);
-//     float t_min = 1e20f;
-
-//     for (int i = 0; i < sphere_count; ++i) {
-//         float t;
-//         if (spheres[i].intersect(ray_origin, ray_dir, t) && t < t_min) {
-//             t_min = t;
-//             pixel_color = spheres[i].color;
-//         }
-//     }
-
-//     framebuffer[idx] = pixel_color;
-// }
 __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres, int sphere_count) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -72,22 +47,22 @@ __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres
 
     int idx = y * width + x;
     Vec3 pixel_color(0, 0, 0);
-    int samples = 4; // 每像素采样 4 次
+    int samples = 4; // 4 samples per pixel
 
-    // 初始化随机数种子（如果需要随机采样）
+    // Initialize the random number seed (if random sampling is required)
     curandState rand_state;
     curand_init((unsigned long long)idx, 0, 0, &rand_state);
 
     for (int s = 0; s < samples; ++s) {
-        // 随机采样 u 和 v
+        // Random sampling u and v
         float u = (x + curand_uniform(&rand_state)) / width;
         float v = (y + curand_uniform(&rand_state)) / height;
 
-        // 生成光线
+        // Generate the ray
         Vec3 ray_origin(0, 0, 0);
         Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
 
-        // 跟踪光线
+        // Ray-sphere intersection check
         float t_min = 1e20f;
         Vec3 sample_color(0, 0, 0);
         for (int i = 0; i < sphere_count; ++i) {
@@ -98,14 +73,14 @@ __global__ void render(Vec3* framebuffer, int width, int height, Sphere* spheres
             }
         }
 
-        // 累加采样结果
+        // Accumulate the sample result
         pixel_color = pixel_color + sample_color;
     }
 
-    // 取平均值
+    // Take the average
     pixel_color = pixel_color / float(samples);
 
-    // 写入帧缓冲区
+    // Write the pixel color to the framebuffer
     framebuffer[idx] = pixel_color;
 }
 
@@ -151,10 +126,10 @@ int main() {
     cudaFree(framebuffer);
     cudaFree(d_spheres);
 
-    // 停止计时
+    // Calculate the execution time
     auto end = std::chrono::high_resolution_clock::now();
 
-    // 输出时间
+    // Output the execution time
     std::cout << "Total execution time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
             << " ms\n";

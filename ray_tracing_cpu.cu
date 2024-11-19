@@ -65,26 +65,26 @@ int main() {
     };
     int sphere_count = 3;
 
-    // 初始化随机数生成器
-    std::mt19937 rng(12345); // 固定种子，保证可重复性
+    // Initialize the random number generator
+    std::mt19937 rng(12345); // Seed with a constant value for reproducibility
     std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
-    // 遍历每个像素
+    // Loop over all pixels
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             Vec3 pixel_color(0, 0, 0);
-            int samples = 4; // 每像素采样 4 次
+            int samples = 4; // Number of samples per pixel
 
             for (int s = 0; s < samples; ++s) {
-                // 随机采样 u 和 v
+                // Random sampling u and v
                 float u = (x + dist(rng)) / width;
                 float v = (y + dist(rng)) / height;
 
-                // 生成光线
+                // Generate the ray
                 Vec3 ray_origin(0, 0, 0);
                 Vec3 ray_dir = Vec3(u - 0.5f, v - 0.5f, -1).normalize();
 
-                // 光线与球体相交检测
+                // Ray-sphere intersection check
                 Vec3 sample_color(0, 0, 0);
                 float t_min = 1e20f;
                 for (int i = 0; i < sphere_count; ++i) {
@@ -95,21 +95,21 @@ int main() {
                     }
                 }
 
-                // 累加采样结果
+                // Accumulate the sample result
                 pixel_color = pixel_color + sample_color;
             }
 
-            // 取平均值
+            // Take the average
             pixel_color = pixel_color / float(samples);
             framebuffer[y * width + x] = pixel_color;
         }
     }
 
     save_image(framebuffer.data(), width, height, "output_cpu.ppm");
-    // 停止计时
+    // Output the total execution time
     auto end = std::chrono::high_resolution_clock::now();
 
-    // 输出时间
+    // Output the total execution time
     std::cout << "Total execution time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
             << " ms\n";
